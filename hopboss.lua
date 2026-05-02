@@ -1,52 +1,51 @@
 repeat task.wait() until game:IsLoaded(5)
 getgenv().TargetBoss = getgenv().TargetBoss or "Miyamoto Musashi"
 
-local function fastHop()
-    print("--- เริ่มการบังคับย้ายเซิร์ฟเวอร์ (Force Hop) ---")
+local function instantHop()
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
     local PlaceId = game.PlaceId
 
-    -- ดึงข้อมูลเซิร์ฟเวอร์แบบสุ่มหน้า (Random Page) เพื่อลดโอกาสเจอหน้าเดิม
+    print("--- กำลังสุ่มเซิร์ฟเวอร์เพื่อวาร์ปทันที ---")
+    
+    -- ใช้การสุ่มลำดับ Asc/Desc เพื่อหนีหน้าเดิม
     local sortOrder = (math.random(1, 2) == 1) and "Asc" or "Desc"
-    local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=" .. sortOrder .. "&limit=100"
+    local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=" .. sortOrder .. "&limit=50"
 
-    local function search()
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet(url))
-        end)
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
 
-        if success and result and result.data then
-            for _, server in ipairs(result.data) do
-                -- เงื่อนไข: ไม่ใช่เซิร์ฟเวอร์เดิม และ คนไม่เต็ม
-                if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                    print("เจอเซิร์ฟเวอร์ใหม่แล้ว: " .. server.id)
-                    TeleportService:TeleportToPlaceInstance(PlaceId, server.id)
-                    return -- หยุดการทำงานทันทีที่เจอเพื่อวาร์ป
-                end
+    if success and result and result.data then
+        local serverList = {}
+        for _, server in ipairs(result.data) do
+            if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                table.insert(serverList, server.id)
             end
-            
-            -- ถ้าหน้าแรกไม่เจอ ให้ลองสุ่มไปหน้าถัดไปหนึ่งครั้ง
-            if result.nextPageCursor then
-                url = url .. "&cursor=" .. result.nextPageCursor
-                task.wait(0.1)
-                search()
-            end
-        else
-            warn("ดึงข้อมูลเซิร์ฟเวอร์ไม่สำเร็จ กำลังลองใหม่...")
-            task.wait(1)
-            search()
         end
-    end
 
-    search()
+        if #serverList > 0 then
+            -- สุ่มเลือกจากรายการที่หาได้ในหน้าแรกเพื่อความไว
+            local randomServer = serverList[math.random(1, #serverList)]
+            print("พบเซิร์ฟเวอร์เป้าหมาย: " .. randomServer)
+            TeleportService:TeleportToPlaceInstance(PlaceId, randomServer)
+        else
+            -- ถ้าไม่เจอเลย ให้ลองสุ่มวาร์ปแบบสุ่มดวง (Random Join)
+            print("ไม่พบเซิร์ฟเวอร์ว่างในหน้าแรก กำลังใช้ระบบสำรอง...")
+            TeleportService:Teleport(PlaceId)
+        end
+    else
+        warn("HTTP Error: อาจโดน Rate Limit ให้รอสักครู่...")
+        task.wait(2)
+        TeleportService:Teleport(PlaceId) -- บังคับสุ่มวาร์ปผ่านระบบหลักของ Roblox
+    end
 end
 
 local function checkBossExists()
     local target = getgenv().TargetBoss
     local isFound = false
 
-    -- ตรวจสอบบอสจาก Attributes ตามภาพ image_d0a23d.png
+    -- เช็คบอสจาก Attributes (อ้างอิงจาก image_d0a23d.png)
     for _, obj in ipairs(game.Workspace:GetDescendants()) do
         local attrDisplayName = obj:GetAttribute("DisplayName")
         local attrMiniboss = obj:GetAttribute("Miniboss")
@@ -58,18 +57,18 @@ local function checkBossExists()
     end
 
     if not isFound then
-        -- ถ้าไม่เจอ ให้เปลี่ยนเซิร์ฟเวอร์ทันที
-        fastHop()
+        print("ไม่พบ " .. target .. " กำลังย้ายเซิร์ฟเวอร์...")
+        instantHop()
     else
-        print(target .. " ยังอยู่ รอดำเนินการ...")
+        print(target .. " ยังมีชีวิตอยู่.")
     end
 end
 
-
+-- ตั้งเวลาตรวจสอบให้ช้าลงเพื่อไม่ให้โดน Rate Limit
 task.spawn(function()
     while true do
         if not game:IsLoaded() then game.Loaded:Wait() end
         checkBossExists()
-        task.wait(10)
+        task.wait(10) 
     end
 end)
