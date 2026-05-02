@@ -1,3 +1,4 @@
+repeat task.wait() until game:IsLoaded(10)
 local function myCustomFunction()
     -- ตั้งค่าสำหรับการเปลี่ยนเซิร์ฟเวอร์
     getgenv().AutoTeleport = true
