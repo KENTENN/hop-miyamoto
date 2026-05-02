@@ -1,104 +1,95 @@
 local function myCustomFunction()
+    -- ตั้งค่าสำหรับการเปลี่ยนเซิร์ฟเวอร์
     getgenv().AutoTeleport = true
-getgenv().DontTeleportTheSameNumber = true --If you set this true it won't teleport to the server if it has the same number of players as your current server
-getgenv().CopytoClipboard = false
+    getgenv().DontTeleportTheSameNumber = true 
+    getgenv().CopytoClipboard = false
 
-if not game:IsLoaded() then
-    print("Game is loading waiting... | Amnesia Empty Server Finder")
-    repeat
-        wait()
-    until game:IsLoaded()
+    if not game:IsLoaded() then
+        repeat task.wait() until game:IsLoaded()
     end
 
-local maxplayers = math.huge
-local serversmaxplayer;
-local goodserver;
-local gamelink = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local maxplayers = math.huge
+    local serversmaxplayer
+    local goodserver
+    local gamelink = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
 
-function serversearch()
-    for _, v in pairs(game:GetService("HttpService"):JSONDecode(game:HttpGetAsync(gamelink)).data) do
-        if type(v) == "table" and maxplayers > v.playing then
-            serversmaxplayer = v.maxPlayers
-            maxplayers = v.playing
-            goodserver = v.id
+    local function serversearch()
+        local success, result = pcall(function()
+            return game:GetService("HttpService"):JSONDecode(game:HttpGetAsync(gamelink))
+        end)
+        
+        if success and result.data then
+            for _, v in pairs(result.data) do
+                if type(v) == "table" and v.playing and maxplayers > v.playing then
+                    serversmaxplayer = v.maxPlayers
+                    maxplayers = v.playing
+                    goodserver = v.id
+                end
+            end
         end
     end
-    print("Currently checking the servers with max this number of players : " .. maxplayers .. " | Amnesia Empty Server Finder")
-end
 
-function getservers()
-    serversearch()
-    for i,v in pairs(game:GetService("HttpService"):JSONDecode(game:HttpGetAsync(gamelink))) do
-        if i == "nextPageCursor" then
+    local function getservers()
+        serversearch()
+        local success, result = pcall(function()
+            return game:GetService("HttpService"):JSONDecode(game:HttpGetAsync(gamelink))
+        end)
+        
+        if success and result.nextPageCursor then
             if gamelink:find("&cursor=") then
                 local a = gamelink:find("&cursor=")
-                local b = gamelink:sub(a)
-                gamelink = gamelink:gsub(b, "")
+                gamelink = gamelink:sub(1, a - 1)
             end
-            gamelink = gamelink .. "&cursor=" ..v
+            gamelink = gamelink .. "&cursor=" .. result.nextPageCursor
             getservers()
         end
     end
-end
 
-getservers()
+    print("Searching for an empty server...")
+    getservers()
 
-    print("All of the servers are searched") 
-	print("Server : " .. goodserver .. " Players : " .. maxplayers .. "/" .. serversmaxplayer .. " | Amnesia Empty Server Finder")
-    if CopytoClipboard then
-    setclipboard(goodserver)
-    end
-    if AutoTeleport then
-        if DontTeleportTheSameNumber then 
-            if #game:GetService("Players"):GetPlayers() - 1 == maxplayers then
-                return warn("It has same number of players (except you)")
+    if goodserver then
+        if getgenv().AutoTeleport then
+            if getgenv().DontTeleportTheSameNumber and #game:GetService("Players"):GetPlayers() - 1 == maxplayers then
+                return warn("Server has same number of players. Staying here.")
             elseif goodserver == game.JobId then
-                return warn("Your current server is the most empty server atm") 
+                return warn("Already in the emptiest server.")
             end
+            print("Teleporting to: " .. goodserver)
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, goodserver)
         end
-        print("AutoTeleport is enabled. Teleporting to : " .. goodserver)
-        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, goodserver)
     end
 end
-
-
-
-
--- getgenv().TargetBoss = "Miyamoto Musashi"
-
 
 local function checkBossExists()
-    -- ดึงค่าจาก getgenv ถ้าไม่มีให้ใช้ค่า Default เป็น Miyamoto Musashi
-    local target = getgenv().TargetBoss or "Miyamoto Musashi"
+    local target = getgenv().TargetBoss
     local isFound = false
 
-    -- ค้นหาใน Workspace:GetDescendants() เพื่อความยืดหยุ่นตามโครงสร้างใน image_d0a23d.png
+    -- ค้นหาผ่าน Descendants เพื่อรองรับชื่อแบบสุ่มในโฟลเดอร์ Live
     for _, obj in ipairs(game.Workspace:GetDescendants()) do
-        
-        -- ตรวจสอบจาก Attributes ตามที่ปรากฏใน image_d0a23d.png
+        -- ตรวจสอบผ่าน Attributes (DisplayName/Miniboss) ตามภาพ image_d0a23d.png
         local attrDisplayName = obj:GetAttribute("DisplayName")
         local attrMiniboss = obj:GetAttribute("Miniboss")
         
-        -- ตรวจสอบจากชื่อ Object (รองรับกรณีชื่อมีจุดนำหน้าหรือรหัสสุ่มท้ายชื่อ)
-        local objectName = obj.Name
-
-        if (attrDisplayName == target) or (attrMiniboss == target) or (objectName:find(target)) then
+        if (attrDisplayName == target) or (attrMiniboss == target) or (obj.Name:find(target)) then
             isFound = true
-            print("Found Target: " .. obj:GetFullName() .. " (Matched by: " .. target .. ")")
+            print("Target Found: " .. obj:GetFullName())
             break 
         end
     end
 
     if not isFound then
+        print(target .. " not found. Executing Server Hop...")
         myCustomFunction()
     else
-        print(target .. " is currently active.")
+        print(target .. " is alive. Waiting...")
     end
 end
 
-
-
-while true do
-    checkBossExists()
-    wait(5) 
-end
+-- ใช้ task.spawn เพื่อไม่ให้ลูปหลักค้างขณะรอเปลี่ยนเซิร์ฟเวอร์
+task.spawn(function()
+    while true do
+        checkBossExists()
+        task.wait(10) -- เพิ่มเวลาเป็น 10 วินาทีเพื่อลดภาระเครื่อง
+    end
+end)
